@@ -1,0 +1,14 @@
+@echo off
+echo.
+echo INICIANDO PROYECTO ICFES ANALYTICS - Juan Pablo Bahamon
+echo.
+start "" "C:\Users\JUAN\AppData\Local\Programs\Python\Python312\python.exe" -m uvicorn src.icfes_analytics.app.main:app --reload
+timeout /t 12 >nul
+echo.
+echo Abriendo API y Dashboard...
+start http://127.0.0.1:8000/docs
+start http://localhost:8501
+echo.
+echo ¡TODO LISTO! El proyecto esta corriendo.
+echo Cierra esta ventana cuando termines.
+pause

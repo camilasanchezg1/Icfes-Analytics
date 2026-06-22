@@ -1,0 +1,107 @@
+
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import os
+
+st.set_page_config(page_title="ICFES Analytics Risaralda", layout="wide")
+st.title("Análisis ICFES Risaralda 2014-2024")
+st.markdown("**Dashboard Interactivo con Recomendaciones Personalizadas**\n**Juan Pablo Bahamón Sánchez - Ana Camila Sánchez - Santiago Arciniegas © 2025**")
+
+# ============================ CARGAR DATOS ============================
+@st.cache_data
+def cargar_datos():
+    path = os.path.join("data", "Pruebas_ICFES_20251111.csv")
+    df = pd.read_csv(path, encoding="utf-8")
+    mapeo = {"A+":5,"A":4,"B":3,"C":2,"D":1,"NR":0,"NA":0}
+    años = [c for c in df.columns if "AÑO" in c]
+    for a in años:
+        df[a] = df[a].astype(str).str.strip().map(mapeo).fillna(0).astype(int)
+    return df, años
+
+df, años = cargar_datos()
+
+# ============================ MÉTRICAS ============================
+col1, col2, col3 = st.columns(3)
+col1.metric("Instituciones", len(df))
+col2.metric("Municipios", df["MUNICIPIO"].nunique())
+col3.metric("Período", "2014-2024")
+
+st.markdown("---")
+
+# ============================ FILTROS ============================
+st.subheader("Filtros Interactivos")
+col1, col2 = st.columns(2)
+with col1:
+    municipio = st.selectbox("Municipio", ["Todos"] + sorted(df["MUNICIPIO"].unique()))
+with col2:
+    institucion = st.selectbox("Institución", ["Todos"] + sorted(df["INSTITUCION EDUCATIVA"].unique()))
+
+# Aplicar filtros
+filtered = df.copy()
+if municipio != "Todos":
+    filtered = filtered[filtered["MUNICIPIO"] == municipio]
+if institucion != "Todos":
+    filtered = filtered[filtered["INSTITUCION EDUCATIVA"] == institucion]
+
+st.success(f"Mostrando {len(filtered)} instituciones")
+
+# ============================ GRÁFICO LÍNEA ============================
+df_long = filtered.melt(id_vars=["INSTITUCION EDUCATIVA"], value_vars=años, var_name="Año", value_name="Nivel")
+df_long["Año"] = df_long["Año"].str.replace("AÑO ", "")
+
+if df_long["Nivel"].sum() > 0:
+    fig = px.line(df_long, x="Año", y="Nivel", color="INSTITUCION EDUCATIVA", title="Evolución del Rendimiento", markers=True)
+    fig.update_yaxes(tickvals=[0,1,2,3,4,5], ticktext=["NR","D","C","B","A","A+"])
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("No hay datos suficientes para la evolución temporal")
+
+# ============================ HEATMAP ============================
+if not filtered.empty:
+    pivot = filtered.set_index("INSTITUCION EDUCATIVA")[años]
+    st.plotly_chart(px.imshow(pivot, color_continuous_scale="RdYlGn", title="Heatmap de Calificaciones"), use_container_width=True)
+
+# ============================ TOP 10 (100% SEGURO - SIN IndexError NUNCA) ============================
+st.subheader("Top 10 Instituciones (Promedio 2014-2024)")
+promedios = filtered[años].mean(axis=1)
+promedios_validos = promedios[promedios > 0]
+
+if len(promedios_validos) > 0:
+    top_n = min(10, len(promedios_validos))
+    top_indices = promedios_validos.nlargest(top_n).index
+    top_df = filtered.loc[top_indices, ["INSTITUCION EDUCATIVA"]].copy()
+    top_df["Promedio"] = promedios_validos.nlargest(top_n).values.round(2)
+    top_df = top_df.sort_values("Promedio", ascending=False)
+
+    fig_bar = px.bar(top_df, x="Promedio", y="INSTITUCION EDUCATIVA", orientation="h",
+                     title=f"Top {top_n} Instituciones", color="Promedio", color_continuous_scale="Blues")
+    st.plotly_chart(fig_bar, use_container_width=True)
+else:
+    st.warning("No hay suficientes datos para mostrar el ranking")
+
+# ============================ RECOMENDACIÓN 100% PERSONALIZADA ============================
+st.subheader("Recomendación Personalizada")
+if len(filtered) == 0 or promedios_validos.sum() == 0:
+    st.info("Selecciona un municipio o institución para ver la recomendación")
+else:
+    avg = round(promedios_validos.mean(), 2)
+    nombre = municipio if municipio != "Todos" else "Risaralda"
+    if institucion != "Todos":
+        nombre = institucion
+
+    if avg >= 4.5:
+        st.success(f"**¡EXCELENCIA TOTAL en {nombre}!** (Promedio: {avg}/5.0)\nEres referente departamental. ¡Conviértete en institución formadora de otras!")
+    elif avg >= 4.0:
+        st.success(f"**MUY ALTO RENDIMIENTO en {nombre}** ({avg}/5.0)\nFalta poco para la perfección. Enfócate en inglés y ciencias naturales.")
+    elif avg >= 3.5:
+        st.info(f"**BUEN NIVEL en {nombre}** ({avg}/5.0)\nFortalece lectura crítica y matemáticas para entrar al top 10 departamental.")
+    elif avg >= 3.0:
+        st.info(f"**NIVEL ACEPTABLE en {nombre}** ({avg}/5.0)\nPrioriza programas de refuerzo en matemáticas y ciencias.")
+    elif avg >= 2.0:
+        st.warning(f"**ALERTA en {nombre}** ({avg}/5.0)\nPlan intensivo urgente en lectura crítica, matemáticas y ciencias naturales.")
+    else:
+        st.error(f"**CRISIS EDUCATIVA en {nombre}** ({avg}/5.0)\n¡Intervención inmediata de la Secretaría de Educación requerida!")
+
+st.balloons()
+st.markdown("**Proyecto Final 5.0 - Juan Pablo Bahamón Sánchez, Ana Camila Sánchez, Santiago Arciniegas**")
